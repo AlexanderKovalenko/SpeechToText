@@ -1,0 +1,198 @@
+﻿<!DOCTYPE html>
+
+<html>
+<head>
+    <title>SpeechToText</title>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+
+    <script>
+        // Control phrase: "The issue occurs if you retrieve fixes for all known bugs. In code you can modify the sort order for .NET."
+
+        var iconGray = '<svg style="fill: gray" viewBox="0 0 24 25" width="24" height="24"><circle cx="12" cy="14" r="11"/></svg>';
+        var iconRed = '<svg style="fill: red" viewBox="0 0 24 25" width="24" height="24"><g><circle cx="12" cy="14" r="8"/><circle cx="12" cy="14" r="10" stroke="red" stroke-width="2" fill="none"/><animate attributeName="opacity" values="0;1;0" dur="3s" repeatCount="indefinite"/></g></svg>';
+
+        var replacements = {
+            code: ["court", "coat"],
+            illustrated: ["illustrated"],
+            //test: ["a", "b"]
+        };
+
+        $(document).ready(function () {
+            //var str = format("this bold value after bold test bold example");
+            //var str = format("bold");
+            //alert(str);
+
+            var isActive = false;
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            var recognition = new SpeechRecognition();
+            var addedResultIndices = [];
+
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 2;
+            recognition.lang = "en-US";
+
+            const speechRecognitionList = new webkitSpeechGrammarList();
+            speechRecognitionList.addFromString("#JSGF V1.0; grammar termsIgnore; public <termIgnore> = court | goat | coat | quote | cold | gold;", 0.01);
+            speechRecognitionList.addFromString("#JSGF V1.0; grammar terms; public <term> = code | debug | grid | pivot | WinForms | WebForms;", 1);
+            recognition.grammars = speechRecognitionList;
+
+            recognition.onresult = function (e) {
+                //debugger;
+                for (var i = 0; i < e.results.length; i++) {
+                    if (e.results[i].isFinal && addedResultIndices.indexOf(i) == -1) {
+                        addedResultIndices.push(i);
+
+                        var isNewSentence = par1.value.trimEnd().endsWith(".") || par1.value.trimEnd().endsWith("?");
+                        var isNewPart = par1.value.trimEnd().endsWith(",");
+                        var isColon = par1.value.trimEnd().endsWith(":");
+                        //var isNewSentence = getLineBeforeCursor().trimEnd().endsWith(".");
+                        var finalResult = e.results[i][0].transcript;
+
+                        //debugger;
+
+                        if (isNewSentence)
+                            finalResult = capitalize(finalResult);
+
+                        // Space after punctuation chars
+                        var prefix = ((isNewSentence || isNewPart || isColon) && !par1.value.endsWith(" ")) ? " " : "";
+
+                        // Space before regular (non-punctuation) chars if next chars are not punctuation commands
+                        if (!isNewSentence && !isNewPart && !isColon && !par1.value.endsWith(" ") && !finalResult.startsWith(" comma") && !finalResult.startsWith(" period") && !finalResult.startsWith(" colon"))
+                            prefix = " ";
+
+                        window.console.log(finalResult);
+
+                        finalResult = finalResult.replace(/ comma/gi, ",").replace(/ period/gi, ".").replace(/ colon/gi, ":").replace(/ new line/gi, "\n");
+
+                        for (const target in replacements) {
+                            for (const source of replacements[target]) {
+                                finalResult = finalResult.replace(new RegExp(" " + source, "gi"), " " + target);
+                            }
+                        }
+
+                        if (!finalResult.startsWith("\n"))
+                            finalResult = finalResult.trimStart();
+                        else
+                            finalResult = finalResult.replace(" ", "");
+
+                        par1.value += prefix + formatBold(finalResult);
+                        //par1.innerText += e.results[i][0].transcript;
+                        //insertTextAtCursor(e.results[i][0].transcript);
+                    }
+                }
+            };
+
+            recognition.onend = function (e) {
+                isActive = false;
+                btnRecording.innerHTML = iconGray;
+            };
+
+            recognition.onerror = function (e) {
+                debugger;
+                recognition.stop();
+            }
+
+            var btnRecording = document.createElement('button');
+
+            btnRecording.title = "Start/stop speech to text recognition (CTRL+Click for alternate language).\nCommand words: 'period', 'comma', 'colon', 'bold', 'new line'.";
+            btnRecording.style.padding = 0;
+            btnRecording.innerHTML = iconGray;
+            document.body.appendChild(btnRecording);
+
+            btnRecording.addEventListener('click', e => {
+                isActive = !isActive;
+                btnRecording.innerHTML = isActive ? iconRed : iconGray;
+
+                recognition.lang = !e.ctrlKey ? "en-US" : "ru";
+
+                if (isActive) {
+                    addedResultIndices = [];
+                    recognition.start();
+                }
+                else {
+                    recognition.stop();
+                }
+            });
+
+            function insertTextAtCursor(text) {
+                var editor = $(".CodeMirror")[0].CodeMirror;
+                var doc = editor.getDoc();
+                var cursor = doc.getCursor();
+
+                doc.replaceRange(text, cursor);
+            }
+
+            function getLineBeforeCursor() {
+                var editor = $(".CodeMirror")[0].CodeMirror;
+                var doc = editor.getDoc();
+                var cursor = doc.getCursor();
+
+                return doc.getLine(cursor.line).slice(0, cursor.ch);
+            }
+
+            function capitalize(text) {
+                if (text[0] != " ")
+                    return text[0].toUpperCase() + text.slice(1);
+                else
+                    return " " + text[1].toUpperCase() + text.slice(2);
+            }
+
+            function formatBold(str) {
+                var result = str.replace(/ bold/gi, "**").replace(/ bolt/gi, "**");
+                var isBoldState = false;
+
+                for (var i = result.length - 1; i > 0; i--) {
+                    if (result.substr(i, 2) == "**")
+                        isBoldState = true;
+
+                    if (isBoldState && (i == 1 || result[i - 1] == ' ')) {
+                        result = insertAt(result, i == 1 ? 0 : i, "**");
+                        isBoldState = false;
+                    }
+                }
+
+                return result;
+            }
+
+            function insertAt(str, index, str2) {
+                return str.slice(0, index) + str2 + str.slice(index);
+            }
+        });
+
+        /*function startDictation() {
+            if (window.hasOwnProperty('webkitSpeechRecognition')) {
+
+                var recognition = new webkitSpeechRecognition();
+
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = "en-US";
+
+                recognition.start();
+
+                recognition.onresult = function (e) {
+
+                    //recognition.stop();
+                    debugger;
+                    //if (.isFinal) {
+                    understand(e.results[0][0].transcript);
+                };
+            }
+        }
+        window.onload = startDictation;
+        function understand(msg) {
+            console.log(msg);
+            //startDictation();
+        }*/
+    </script>
+</head>
+<body>
+    <form>
+        <textarea id="par1" rows="10" cols="80"></textarea>
+        <button onclick="$('#par1').val(''); return false;">Clear</button>
+        <!--<button onclick="$.getJSON('test.js'); return false;">Test</button>-->
+    </form>
+</body>
+</html>
